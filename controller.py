@@ -28,20 +28,34 @@ def calc_checksum(command):
     return(lsb)
 
 def trans_set(command):
-    trans_cmd = [command[0], 'FE']
+    """Translate a set instruction to a 6-byte code for the hotplate."""
 
+    trans_cmd = [command[0], 'FE']
     if(command[2] == 't'): trans_cmd[1] += 'B2'
     else: trans_cmd[1] += 'B1'
-
     trans_cmd[1] += str(hex(int(command[3])))[2:].rjust(4,'0')
     trans_cmd[1] += '00'
     checksum = calc_checksum(trans_cmd[1])
     trans_cmd[1] += checksum
-
     return(trans_cmd)
 
-def monitor(port, plotwriter):
-    pass
+def monitor(port, plotwriter, start_time):
+    """Receive the actual speed and temperature from the hotplate, show it on
+    screen and write it to the csv file."""
+    send_command(port, 'FEA2000000A2')
+    reply = port.read(11)
+    set_temp = reply[7:8]
+    set_speed = reply[3:4]
+    meas_temp = reply[9:10]
+    meas_speed = reply[5:6]
+    cur_time = time.time() - start_time
+    print('Time: ' + str(cur_time)[:4]
+        + '; Set temp: ' + str(set_temp)
+        + '; Act temp: ' + str(meas_temp)
+        + '; Set speed: ' + str(set_speed)
+        + '; Act speed: ' + str(meas_speed)
+        + '\r', end='', flush=True)
+    plotwriter.writerow([cur_time, set_temp, meas_temp, set_speed, meas_speed])
 
 def exec_recipe(port, recipe, log):
     """Execute a recipe file."""
@@ -58,7 +72,7 @@ def exec_recipe(port, recipe, log):
             if command[1] == 'set':
                 command_start_time = time.time()
                 while(time.time()-command_start_time < int(command[0])):
-                    monitor(port, plotwriter)
+                    monitor(port, plotwriter, start_time)
                 trans_cmd = trans_set(command)
                 send_command(port, trans_cmd[1])
                 port.read(6) #Wait for confirmation, discard
@@ -84,7 +98,7 @@ def exec_recipe(port, recipe, log):
                     send_command(port, trans_cmd[1])
                     new_value += incr_per_step
                     while(time.time()-step_start < step_size):
-                        monitor(port, plotwriter)
+                        monitor(port, plotwriter, start_time)
 
 
 def init_plate(port, log):
