@@ -8,7 +8,7 @@ import csv
 import serial
 import time
 
-portname = 'COM8'
+portname = 'COM4'
 recipe = 'recipes/recipe1.txt'
 step_size = 10
 
@@ -44,18 +44,22 @@ def monitor(port, plotwriter, start_time):
     screen and write it to the csv file."""
     send_command(port, 'FEA2000000A2')
     reply = port.read(11)
-    set_temp = reply[7:8]
-    set_speed = reply[3:4]
-    meas_temp = reply[9:10]
-    meas_speed = reply[5:6]
+    set_temp = int.from_bytes(reply[6:8], byteorder='big')
+    set_speed = int.from_bytes(reply[2:4], byteorder='big')
+    meas_temp = int.from_bytes(reply[8:10], byteorder='big')
+    meas_speed = int.from_bytes(reply[4:6], byteorder='big')
     cur_time = time.time() - start_time
-    print('Time: ' + str(cur_time)[:4]
-        + '; Set temp: ' + str(set_temp)
-        + '; Act temp: ' + str(meas_temp)
+    print('Time: ' + str(cur_time)[:6]
+        + '; Set temp: ' + str(set_temp)[:-1] + '.' + str(set_temp)[-1]
+        + '; Act temp: ' + str(meas_temp)[:-1] + '.' + str(meas_temp)[-1]
         + '; Set speed: ' + str(set_speed)
         + '; Act speed: ' + str(meas_speed)
         + '\r', end='', flush=True)
-    plotwriter.writerow([cur_time, set_temp, meas_temp, set_speed, meas_speed])
+
+    send_command(port, 'FEA1000000A1')
+    reply = port.read(11)
+    heating_on = reply[4]
+    plotwriter.writerow([cur_time, set_temp, meas_temp, set_speed, meas_speed, heating_on])
 
 def exec_recipe(port, recipe, log):
     """Execute a recipe file."""
@@ -64,26 +68,32 @@ def exec_recipe(port, recipe, log):
     with open(recipe) as recipe_file:
         command_list = [line.rstrip().split(' ') for line in recipe_file]
 
-    #Send commands at specified times
-    with open('plotfile.csv') as plotfile:
-        plotwriter = csv.writer(plotfile, delimiter=',', dialect='excel')
+    #Send commands at specified times, monitor while not sending
+    with open('plotfile.csv', 'w+', newline='') as plotfile:
+        plotwriter = csv.writer(plotfile, delimiter='\t', dialect='excel')
         start_time = time.time()
         for command in command_list:
             if command[1] == 'set':
                 command_start_time = time.time()
-                while(time.time()-command_start_time < int(command[0])):
-                    monitor(port, plotwriter, start_time)
                 trans_cmd = trans_set(command)
                 send_command(port, trans_cmd[1])
                 port.read(6) #Wait for confirmation, discard
+                send_command(port, 'FEA1000000A1')
+                reply = port.read(11)
+                if reply[4] == 1:
+                    send_command(port, trans_cmd[1])
+                    port.read(6)
+                while(time.time()-command_start_time < int(command[0])):
+                    monitor(port, plotwriter, start_time)
+
 
             if command[1] == 'ramp':
                 send_command(port, 'FEA2000000A2')
                 reply = port.read(11)
-                set_temp = reply[7:8]
-                set_speed = reply[3:4]
+                set_temp = int.from_bytes(reply[6:8], byteorder='big')
+                set_speed = int.from_bytes(reply[2:4], byteorder='big')
 
-                num_of_steps = command[0]/step_size
+                num_of_steps = int(int(command[0])/step_size)
                 if command[2] == 't':
                     incr_per_step = (command[3]-set_temp)/num_of_steps
                     new_value = set_temp + incr_per_step
@@ -115,9 +125,10 @@ def init_plate(port, log):
             log.write(str(i) + ' ' + str(res) + '\n')
             print('.', end='', flush=True)
             #Hotplate may crash if packets are sent too quickly (~50 ms)
-            time.sleep(0.05)
         print('Connected')
         log.write('Initialization finished\n')
+        port.reset_input_buffer()
+        port.reset_output_buffer()
         time.sleep(0.1)
 
 def main():
@@ -127,7 +138,7 @@ def main():
             log.write('Port opened on port ' + portname + '\n')
             init_plate(port, log) #Send initialization commands
             exec_recipe(port, recipe, log) #Execute a recipe
-            print('Recipe finished')
+            print('\nRecipe finished', flush=True)
 
 if __name__ == "__main__":
     main()
