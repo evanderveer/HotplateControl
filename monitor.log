@@ -1,7 +1,7 @@
 Initialization
 Port opened on port COM8
 Response received from hotplate:
-0 b''
+0 b'\xfd\xa0\x00\x00\x00\xa0'
 1 b'\xfd\xa3M\x00\x00\xf0'
 2 b'\xfd\xa3S\x00\x00\xf6'
 3 b'\xfd\xa3-\x00\x00\xd0'

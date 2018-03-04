@@ -8,9 +8,11 @@ import csv
 import serial
 import time
 
-portname = 'COM4'
+portname = 'COM8'
 recipe = 'recipes/recipe1.txt'
 step_size = 10
+
+#TODO: Implement command line functionality
 
 def send_command(port, line):
     """Send the command to the hotplate and wait 50ms"""
@@ -42,6 +44,7 @@ def trans_set(command):
 def monitor(port, plotwriter, start_time):
     """Receive the actual speed and temperature from the hotplate, show it on
     screen and write it to the csv file."""
+
     send_command(port, 'FEA2000000A2')
     reply = port.read(11)
     set_temp = int.from_bytes(reply[6:8], byteorder='big')
@@ -61,6 +64,13 @@ def monitor(port, plotwriter, start_time):
     heating_on = reply[4]
     plotwriter.writerow([cur_time, set_temp, meas_temp, set_speed, meas_speed, heating_on])
 
+def check_heating_on(port, trans_cmd):
+    send_command(port, 'FEA1000000A1')
+    reply = port.read(11)
+    if reply[4] == 1:
+        send_command(port, trans_cmd[1])
+        port.read(6)
+
 def exec_recipe(port, recipe, log):
     """Execute a recipe file."""
 
@@ -78,11 +88,7 @@ def exec_recipe(port, recipe, log):
                 trans_cmd = trans_set(command)
                 send_command(port, trans_cmd[1])
                 port.read(6) #Wait for confirmation, discard
-                send_command(port, 'FEA1000000A1')
-                reply = port.read(11)
-                if reply[4] == 1:
-                    send_command(port, trans_cmd[1])
-                    port.read(6)
+                check_heating_on(port, trans_cmd)
                 while(time.time()-command_start_time < int(command[0])):
                     monitor(port, plotwriter, start_time)
 
@@ -95,18 +101,20 @@ def exec_recipe(port, recipe, log):
 
                 num_of_steps = int(int(command[0])/step_size)
                 if command[2] == 't':
-                    incr_per_step = (command[3]-set_temp)/num_of_steps
+                    incr_per_step = (int(command[3])-set_temp)/num_of_steps
                     new_value = set_temp + incr_per_step
                 else:
-                    incr_per_step = (command[3]-set_speed)/num_of_steps
+                    incr_per_step = (int(command[3])-set_speed)/num_of_steps
                     new_value = set_speed + incr_per_step
 
                 for step in range(num_of_steps):
                     step_start = time.time()
-                    new_cmd = command[0] + ' set ' + command[2] + ' ' + str(new_value)
+                    new_cmd = [command[0], 'set', 't', str(int(new_value))]
                     trans_cmd = trans_set(new_cmd)
                     send_command(port, trans_cmd[1])
+                    port.read(6)
                     new_value += incr_per_step
+                    check_heating_on(port, trans_cmd)
                     while(time.time()-step_start < step_size):
                         monitor(port, plotwriter, start_time)
 
