@@ -77,7 +77,7 @@ class Hotplate():
                     self.port.read(6) #Wait for confirmation, discard
                     self.check_heating_on(trans_cmd)
                     while(time.time()-command_start_time < int(command[0])):
-                        self.monitor(plotwriter, start_time)
+                        self.get_hp_data(plotwriter, start_time)
 
 
                 if command[1] == 'ramp':
@@ -103,10 +103,10 @@ class Hotplate():
                         new_value += incr_per_step
                         self.check_heating_on(trans_cmd)
                         while(time.time()-step_start < self.step_size):
-                            self.monitor(plotwriter, start_time)
+                            self.get_hp_data(plotwriter, start_time)
         print('\nRecipe finished')
 
-    def monitor(self, plotwriter, start_time):
+    def get_hp_data(self, plotwriter, start_time):
         """Receive the actual speed and temperature from the hotplate, show it
         on screen and write it to the csv file."""
 
@@ -129,6 +129,19 @@ class Hotplate():
         heating_on = reply[4]
         plotwriter.writerow([cur_time, set_temp, meas_temp, set_speed,
                             meas_speed, heating_on])
+
+    def monitor(self):
+        with open(self.plotfile, 'w+', newline='') as plotfile:
+            plotwriter = csv.writer(plotfile, delimiter='\t', quoting=csv.QUOTE_NONE)
+            start_time = time.time()
+            while(True):
+                try:
+                    self.get_hp_data(plotwriter, start_time)
+                    time.sleep(0.5)
+                except:
+                    print('', flush=True)
+                    break
+
 
     @staticmethod
     def translate_cmd(command):
