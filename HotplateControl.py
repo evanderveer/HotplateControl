@@ -66,7 +66,7 @@ class Hotplate():
 
         #Send commands at specified times, monitor while not sending
         with open(self.plotfile, 'w+', newline='') as plotfile:
-            plotwriter = csv.writer(plotfile, delimiter='\t', dialect='excel')
+            plotwriter = csv.writer(plotfile, delimiter='\t', quoting=csv.QUOTE_NONE)
             start_time = time.time()
             for command in command_list:
 
