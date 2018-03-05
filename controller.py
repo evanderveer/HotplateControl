@@ -12,7 +12,6 @@ portname = 'COM8'
 recipe = 'recipes/recipe1.txt'
 step_size = 10
 
-#TODO: Implement command line functionality
 
 def send_command(port, line):
     """Send the command to the hotplate and wait 50ms"""
