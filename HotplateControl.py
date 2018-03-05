@@ -4,23 +4,22 @@ import time
 
 class Hotplate():
 
-    def __init__(self, port_name, recipe, step_size, plotfile, logfile):
+    def __init__(self, port_name, step_size, plotfile, logfile):
         self.port_name = port_name
-        self.recipe = recipe
         self.step_size = step_size
         self.plotfile = plotfile
         self.logfile = logfile
 
     def __enter__(self):
-        self.port = serial.Serial(self.portname, timeout=1)
+        self.port = serial.Serial(self.port_name, timeout=1)
         self.log = open(self.logfile, 'w+')
-
         self.initialize()
+        return(self)
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         self.port.close()
         self.log.close()
-        print('Connection closed\n')
+        print('Connection closed')
 
     def initialize(self):
         """Initialize the hotplate using a predefined set of 16 6-byte packets, log
@@ -33,7 +32,7 @@ class Hotplate():
             #First 16 lines send the model name of the hot plate to the software
             for i, line in enumerate(initfile):
                 self.send_command(line)
-                res = port.read(6) #Wait for confirmation
+                res = self.port.read(6) #Wait for confirmation
                 self.log.write(str(i) + ' ' + str(res) + '\n')
                 print('.', end='', flush=True)
                 #Hotplate may crash if packets are sent too quickly (~50 ms)
@@ -43,14 +42,14 @@ class Hotplate():
             self.port.reset_output_buffer()
             time.sleep(0.1)
 
-    def send_command(line):
+    def send_command(self, line):
         """Send the command to the hotplate and wait 50ms"""
 
         for byte in range(0, len(line.rstrip()), 2):
             self.port.write(bytes.fromhex(line[byte]+line[byte+1]))
             time.sleep(0.05)
 
-    def check_heating_on(trans_cmd):
+    def check_heating_on(self, trans_cmd):
         """Check that the heating is on, if not then turn it on"""
         self.send_command('FEA1000000A1')
         reply = self.port.read(11)
@@ -58,11 +57,11 @@ class Hotplate():
             self.send_command(trans_cmd[1])
             self.port.read(6)
 
-    def exec_recipe(self):
+    def exec_recipe(self, recipe):
         """Execute a recipe file."""
 
         #Read commands in recipe
-        with open(self.recipe) as recipe_file:
+        with open(recipe) as recipe_file:
             command_list = [line.rstrip().split(' ') for line in recipe_file]
 
         #Send commands at specified times, monitor while not sending
@@ -73,7 +72,7 @@ class Hotplate():
 
                 if command[1] == 'set':
                     command_start_time = time.time()
-                    trans_cmd = self.translate_cmd(command)
+                    trans_cmd = Hotplate.translate_cmd(command)
                     self.send_command(trans_cmd[1])
                     self.port.read(6) #Wait for confirmation, discard
                     self.check_heating_on(trans_cmd)
@@ -98,14 +97,14 @@ class Hotplate():
                     for step in range(num_of_steps):
                         step_start = time.time()
                         new_cmd = [command[0], 'set', 't', str(int(new_value))]
-                        trans_cmd = self.translate_cmd(new_cmd)
+                        trans_cmd = Hotplate.translate_cmd(new_cmd)
                         self.send_command(trans_cmd[1])
                         self.port.read(6)
                         new_value += incr_per_step
                         self.check_heating_on(trans_cmd)
-                        while(time.time()-step_start < step_size):
+                        while(time.time()-step_start < self.step_size):
                             self.monitor(plotwriter, start_time)
-        print('Recipe finished\n')
+        print('\nRecipe finished')
 
     def monitor(self, plotwriter, start_time):
         """Receive the actual speed and temperature from the hotplate, show it
@@ -140,7 +139,7 @@ class Hotplate():
         else: trans_cmd[1] += 'B1'
         trans_cmd[1] += str(hex(int(command[3])))[2:].rjust(4,'0')
         trans_cmd[1] += '00'
-        checksum = self.calc_checksum(trans_cmd[1])
+        checksum = Hotplate.calc_checksum(trans_cmd[1])
         trans_cmd[1] += checksum
         return(trans_cmd)
 
