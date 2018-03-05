@@ -105,6 +105,7 @@ class Hotplate():
                         self.check_heating_on(trans_cmd)
                         while(time.time()-step_start < step_size):
                             self.monitor(plotwriter, start_time)
+        print('Recipe finished\n')
 
     def monitor(self, plotwriter, start_time):
         """Receive the actual speed and temperature from the hotplate, show it
