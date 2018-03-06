@@ -21,7 +21,7 @@ class Hotplate():
     def __init__(self, port_name, step_size, plotfile, logfile):
         self.port_name = port_name
         self.step_size = step_size
-        self.plotfile = plotfile
+        self.plotfile = './plotfiles/' + plotfile
         self.logfile = logfile
 
     def __enter__(self):
