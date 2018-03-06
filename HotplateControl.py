@@ -1,6 +1,20 @@
 import csv
 import serial
 import time
+import os
+
+def make_cmd_file(cmds, filename):
+    with open('./cmd_files/' + filename, 'w+') as cmdfile:
+        cmdfile.write(cmds.strip('\n'))
+
+def delete_cmd_file(filename):
+    os.remove('./cmd_files/' + filename)
+
+def list_cmd_files():
+    return(os.listdir('./cmd_files'))
+
+def plot_hp_file(temperature=True, speed=True):
+    pass
 
 class Hotplate():
 
@@ -11,7 +25,10 @@ class Hotplate():
         self.logfile = logfile
 
     def __enter__(self):
-        self.port = serial.Serial(self.port_name, timeout=1)
+        try:
+            self.port = serial.Serial(self.port_name, timeout=1)
+        except:
+            raise FileNotFoundError('Hotplate not connected or switched on')
         self.log = open(self.logfile, 'w+')
         self.initialize()
         return(self)
@@ -19,7 +36,7 @@ class Hotplate():
     def __exit__(self, exc_type, exc_value, traceback):
         self.port.close()
         self.log.close()
-        print('Connection closed')
+        print('\nConnection closed')
 
     def initialize(self):
         """Initialize the hotplate using a predefined set of 16 6-byte packets, log
@@ -57,12 +74,12 @@ class Hotplate():
             self.send_command(trans_cmd[1])
             self.port.read(6)
 
-    def exec_recipe(self, recipe):
-        """Execute a recipe file."""
+    def exec_cmd_file(self, cmd_file):
+        """Execute a commands file."""
 
-        #Read commands in recipe
-        with open(recipe) as recipe_file:
-            command_list = [line.rstrip().split(' ') for line in recipe_file]
+        #Read commands in commands file
+        with open('./cmd_files/' + cmd_file) as cmd_file:
+            command_list = [line.rstrip().split(' ') for line in cmd_file]
 
         #Send commands at specified times, monitor while not sending
         with open(self.plotfile, 'w+', newline='') as plotfile:
@@ -104,7 +121,7 @@ class Hotplate():
                         self.check_heating_on(trans_cmd)
                         while(time.time()-step_start < self.step_size):
                             self.get_hp_data(plotwriter, start_time)
-        print('\nRecipe finished')
+        print('\nProcedure finished')
 
     def get_hp_data(self, plotwriter, start_time):
         """Receive the actual speed and temperature from the hotplate, show it
@@ -130,17 +147,18 @@ class Hotplate():
         plotwriter.writerow([cur_time, set_temp, meas_temp, set_speed,
                             meas_speed, heating_on])
 
-    def monitor(self):
+    def monitor(self, max_time=None):
         with open(self.plotfile, 'w+', newline='') as plotfile:
             plotwriter = csv.writer(plotfile, delimiter='\t', quoting=csv.QUOTE_NONE)
             start_time = time.time()
-            while(True):
-                try:
+            try:
+                while(True):
                     self.get_hp_data(plotwriter, start_time)
                     time.sleep(0.5)
-                except:
-                    print('', flush=True)
-                    break
+                    if max_time and time.time()-start_time > max_time:
+                        break
+            except KeyboardInterrupt:
+                pass
 
 
     @staticmethod
