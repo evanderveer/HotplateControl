@@ -2,6 +2,8 @@ import csv
 import serial
 import time
 import os
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def make_cmd_file(cmds, filename):
     with open('./cmd_files/' + filename, 'w+') as cmdfile:
@@ -13,15 +15,49 @@ def delete_cmd_file(filename):
 def list_cmd_files():
     return(os.listdir('./cmd_files'))
 
-def plot_hp_file(temperature=True, speed=True):
-    pass
+def plot_hp_file(filename, set_temp=True, actual_temp=True,
+                 set_speed=True, actual_speed=True):
+    plt.style.use('seaborn')
+    data = pd.read_csv('./plot_files/' + filename, delimiter='\t', header=None)
+    data.columns = ['Time', 'Set_temp', 'Act_temp', 'Set_speed',
+                    'Act_speed', 'Heating_on']
+    data['Act_temp'] /= 10
+    data['Set_temp'] /= 10
+
+    f, ax = plt.subplots(figsize=(10,5))
+    if(actual_temp):
+        data.plot(x='Time', y='Act_temp', ax=ax, color='darkgreen', legend=None)
+    if(set_temp):
+        data.plot(x='Time', y='Set_temp', ax=ax, color='lightgreen', legend=None)
+
+    max_temp = max(data['Act_temp'].max(),data['Set_temp'].max())
+    ax.set_ylim([0, max_temp*1.2])
+    ax.set_ylabel('Temperature ($^o$C)')
+    ax.legend(labels = ['Measured temperature', 'Setpoint temperature'], loc=1,
+              prop={'size': '12'});
+
+    if(not set_speed and not actual_speed):
+        return
+    ax1 = ax.twinx()
+    if(actual_speed):
+        data.plot(x='Time', y='Act_speed', ax=ax1, color='darkblue', legend=None)
+    if(set_speed):
+        data.plot(x='Time', y='Set_speed', ax=ax1, color='lightblue', legend=None)
+    ax1.grid()
+
+    max_speed = max(data['Act_speed'].max(),data['Set_speed'].max())
+    ax1.set_ylim([0, max_speed*1.2])
+    ax1.set_ylabel('Stirring speed (rpm)')
+    ax1.legend(labels = ['Measured speed', 'Setpoint speed'], loc=2,
+               prop={'size': '12'});
+
 
 class Hotplate():
 
     def __init__(self, port_name, step_size, plotfile, logfile):
         self.port_name = port_name
         self.step_size = step_size
-        self.plotfile = './plotfiles/' + plotfile
+        self.plotfile = './plot_files/' + plotfile
         self.logfile = logfile
 
     def __enter__(self):
@@ -154,7 +190,7 @@ class Hotplate():
             try:
                 while(True):
                     self.get_hp_data(plotwriter, start_time)
-                    time.sleep(0.5)
+                    time.sleep(0.05)
                     if max_time and time.time()-start_time > max_time:
                         break
             except KeyboardInterrupt:
